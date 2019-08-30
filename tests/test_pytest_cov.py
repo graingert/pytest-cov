@@ -1,3 +1,4 @@
+import textwrap
 import glob
 import os
 import platform
@@ -354,6 +355,56 @@ def test_cov_min_float_value(testdir):
     assert result.ret == 0
     result.stdout.fnmatch_lines([
         'Required test coverage of 88.88% reached. Total coverage: 88.89%'
+    ])
+
+
+def test_cov_min_multi(testdir):
+    module = testdir.mkpydir("legacy")
+    module.join("uncovered.py").write(
+        textwrap.dedent(
+            """\
+            import sut
+
+            def some_legacy_code():
+                strategy = sut.AbstractFactoryBean()
+                assert strategy.business_critical()
+            """
+        )
+    )
+    module.join("covered.py").write(
+        textwrap.dedent(
+            """\
+            def two_returner_strategy():
+                return 2
+            """
+        )
+    )
+    testsubdir = testdir.mkdir("test")
+
+    testsubdir.join("test_legacy.py").write(
+        textwrap.dedent(
+            """\
+            from legacy import covered
+
+            def test_two_returner_strategy():
+                assert covered.two_returner_strategy() == 2
+            """
+        )
+    )
+    result = testdir.runpytest('-v',
+                               '--cov=%s' % str(testdir.tmpdir),
+                               '--cov-report=term-missing',
+                               '--cov-fail-under=55.55',
+                               '--cov-fail-under=100.0:test/*',
+                               '--cov-fail-under=100.0:+test/*',
+                               '--cov-fail-under=33.33:-test/*',
+                               testsubdir)
+    assert result.ret == 0
+    result.stdout.fnmatch_lines([
+        "Required test coverage of 55.55% reached. Total coverage: 55.56%",
+        "Required test coverage of 100.0%:+test/* reached. Total coverage: 100.00%",
+        "Required test coverage of 100.0%:+test/* reached. Total coverage: 100.00%",
+        "Required test coverage of 33.33%:-test/* reached. Total coverage: 33.33%",
     ])
 
 
