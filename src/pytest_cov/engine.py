@@ -101,67 +101,25 @@ class CovController(object):
     def summary(self, cov_fail_under, stream):
         """Produce coverage reports."""
 
-        def _get_total(cfu):
-            with _backup(self.cov, "config"):
-                return self.cov.report(show_missing=True, ignore_errors=True, include=cfu.include, omit=cfu.omit, file=_NullFile)
-
-        totals = {cfu: _get_total(cfu) for cfu in cov_fail_under}
-
-        if not self.cov_report:
-            return totals
-
-        # Output coverage section header.
-        if len(self.node_descs) == 1:
-            self.sep(stream, '-', 'coverage: %s' % ''.join(self.node_descs))
-        else:
-            self.sep(stream, '-', 'coverage')
-            for node_desc in sorted(self.node_descs):
-                self.sep(stream, ' ', '%s' % node_desc)
-
-        # Produce terminal report if wanted.
-        if any(x in self.cov_report for x in ['term', 'term-missing']):
-            options = {
-                'show_missing': ('term-missing' in self.cov_report) or None,
-                'ignore_errors': True,
-                'file': stream,
-            }
-            skip_covered = isinstance(self.cov_report, dict) and 'skip-covered' in self.cov_report.values()
-            if hasattr(coverage, 'version_info') and coverage.version_info[0] >= 4:
-                options.update({'skip_covered': skip_covered or None})
-            with _backup(self.cov, "config"):
-                self.cov.report(**options)
-
-        # Produce annotated source code report if wanted.
-        if 'annotate' in self.cov_report:
-            annotate_dir = self.cov_report['annotate']
-            with _backup(self.cov, "config"):
-                self.cov.annotate(ignore_errors=True, directory=annotate_dir)
-            if annotate_dir:
-                stream.write('Coverage annotated source written to dir %s\n' % annotate_dir)
+        if self.cov_report:
+            # Output coverage section header.
+            if len(self.node_descs) == 1:
+                self.sep(stream, '-', 'coverage: %s' % ''.join(self.node_descs))
             else:
-                stream.write('Coverage annotated source written next to source\n')
+                self.sep(stream, '-', 'coverage')
+                for node_desc in sorted(self.node_descs):
+                    self.sep(stream, ' ', '%s' % node_desc)
 
-        # Produce html report if wanted.
-        if 'html' in self.cov_report:
-            output = self.cov_report['html']
-            with _backup(self.cov, "config"):
-                self.cov.html_report(ignore_errors=True, directory=output)
-            stream.write('Coverage HTML written to dir %s\n' % (self.cov.config.html_dir if output is None else output))
+        totals = self.cov.summary(self.cov_report, cov_fail_under, stream)
 
-        # Produce xml report if wanted.
-        if 'xml' in self.cov_report:
-            output = self.cov_report['xml']
-            with _backup(self.cov, "config"):
-                self.cov.xml_report(ignore_errors=True, outfile=output)
-            stream.write('Coverage XML written to file %s\n' % (self.cov.config.xml_output if output is None else output))
-
-        # Report on any failed workers.
-        if self.failed_workers:
-            self.sep(stream, '-', 'coverage: failed workers')
-            stream.write('The following workers failed to return coverage data, '
-                         'ensure that pytest-cov is installed on these workers.\n')
-            for node in self.failed_workers:
-                stream.write('%s\n' % node.gateway.id)
+        if self.cov_report:
+            # Report on any failed workers.
+            if self.failed_workers:
+                self.sep(stream, '-', 'coverage: failed workers')
+                stream.write('The following workers failed to return coverage data, '
+                             'ensure that pytest-cov is installed on these workers.\n')
+                for node in self.failed_workers:
+                    stream.write('%s\n' % node.gateway.id)
 
         return totals
 
