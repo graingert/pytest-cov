@@ -73,6 +73,10 @@ class FailUnder(object):
             omit=omit or None,
         )
 
+    @classmethod
+    def normalize(cls, unparsed):
+        return str(cls.parse(unparsed))
+
     def __str__(self):
         return ":".join(
             ['{}%'.format(self.limit)]
@@ -121,7 +125,7 @@ def pytest_addoption(parser):
     group.addoption('--no-cov', action='store_true', default=False,
                     help='Disable coverage report completely (useful for debuggers). '
                          'Default: False')
-    group.addoption('--cov-fail-under', nargs="?", action='append', default=[], metavar='MIN', type=FailUnder.parse,
+    group.addoption('--cov-fail-under', nargs="?", action='append', default=[], metavar='MIN', type=FailUnder.normalize,
                     help='Fail if the total coverage is less than MIN.')
     group.addoption('--cov-append', action='store_true', default=False,
                     help='Do not delete coverage but append to current. '
@@ -173,6 +177,8 @@ class CovPlugin(object):
         self._disabled = False
         self.options = options
 
+        self._fail_under = [FailUnder.parse(v) for v in self.options.cov_fail_under]
+
         is_dist = (getattr(options, 'numprocesses', False) or
                    getattr(options, 'distload', False) or
                    getattr(options, 'dist', 'no') != 'no')
@@ -214,8 +220,8 @@ class CovPlugin(object):
         self.cov_controller.start()
         self._started = True
         cov_config = self.cov_controller.cov.config
-        if not self.options.cov_fail_under and hasattr(cov_config, 'fail_under'):
-            self.options.cov_fail_under = [FailUnder(limit=cov_config.fail_under)]
+        if not self._fail_under and hasattr(cov_config, 'fail_under'):
+            self._fail_under = [FailUnder(limit=cov_config.fail_under)]
 
     def _is_worker(self, session):
         return compat.workerinput(session.config, None) is not None
@@ -261,7 +267,7 @@ class CovPlugin(object):
 
     def _failed_cov_total(self):
         totals = self.cov_totals
-        return any(totals.get(cfu, 0) < cfu.limit for cfu in self.options.cov_fail_under)
+        return any(totals.get(cfu, 0) < cfu.limit for cfu in self._fail_under)
 
     # we need to wrap pytest_runtestloop. by the time pytest_sessionfinish
     # runs, it's too late to set testsfailed
@@ -281,7 +287,7 @@ class CovPlugin(object):
         if not self._is_worker(session) and self._should_report():
             try:
                 self.cov_totals = self.cov_controller.summary(
-                    self.options.cov_fail_under,
+                    self._fail_under,
                     self.cov_report,
                 )
             except CoverageException as exc:
@@ -315,7 +321,7 @@ class CovPlugin(object):
             return
 
         terminalreporter.write('\n' + self.cov_report.getvalue() + '\n')
-        for cfu in self.options.cov_fail_under:
+        for cfu in self._fail_under:
             if cfu.limit <= 0:
                 continue
 
