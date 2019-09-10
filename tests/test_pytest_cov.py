@@ -358,7 +358,8 @@ def test_cov_min_float_value(testdir):
     ])
 
 
-def test_cov_min_multi(testdir):
+@xdist_params
+def test_cov_min_multi(testdir, opts):
     module = testdir.mkpydir("legacy")
     module.join("uncovered.py").write(
         textwrap.dedent(
@@ -398,7 +399,7 @@ def test_cov_min_multi(testdir):
                                '--cov-fail-under=100.0:test/*',
                                '--cov-fail-under=100.0:+test/*',
                                '--cov-fail-under=33.33:-test/*',
-                               testsubdir)
+                               testsubdir, *opts.split())
     assert result.ret == 0
     result.stdout.fnmatch_lines([
         "Required test coverage of 55.55% reached. Total coverage: 55.56%",
